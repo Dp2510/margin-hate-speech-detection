@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Margin · Comment review</title>
+<style>
+* {box-sizing:border-box}
+body {margin:0;background:#f6f4ec;color:#243b34;font:16px/1.55 "DM Sans","Segoe UI",sans-serif}
+header {border-bottom:1px solid #d2d6c9}
+nav,main {max-width:1140px;margin:auto;padding:0 5%}
+nav {height:72px;display:flex;align-items:center;justify-content:space-between}
+.brand {font: bold 25px Georgia,serif;display:flex;align-items:center;gap:12px}
+.mark {background:#235441;color:white;border-radius:8px;padding:0 9px;font:italic bold 28px Georgia}
+.local {font-size:13px;color:#456353}
+h1,h2,p {margin:0}
+h1 {font:normal clamp(44px,7vw,82px)/1.05 Georgia,serif;letter-spacing:-.055em;margin:48px 0 12px}
+.intro {color:#526359;margin-bottom:32px}
+.grid {display:grid;grid-template-columns:1.1fr 1fr;gap:22px;align-items:start;margin-bottom:48px}
+article {background:#fffefa;border:1px solid #d7dbcf;border-radius:18px;padding:26px;box-shadow:0 4px 18px #233a3008}
+h2 {font:normal 30px Georgia,serif;letter-spacing:-.035em}
+label {display:block}
+textarea {width:100%;min-height:220px;resize:vertical;padding:16px;border:1px solid #bac6b8;border-radius:10px;background:#f9faf5;color:inherit;font:inherit;margin:20px 0 6px}
+textarea:focus-visible,button:focus-visible {outline:3px solid #467b5f;outline-offset:2px}
+.actions,.row {display:flex;align-items:center;justify-content:space-between;gap:10px}
+button {font:inherit;cursor:pointer;color:#244d39;border:1px solid #b9c7b7;background:white;border-radius:7px;padding:4px 14px}
+button:disabled {opacity:.45;cursor:default}
+small,.note {font-size:13px;color:#57695d}
+.panel {border-top:5px solid #41664e}
+#status {margin-top:12px;color:#536658}
+#guidance {font-weight:650;font-size:19px;padding:12px 15px;border-radius:9px;background:#e7eedf;margin:15px 0}
+#guidance.review {background:#fff0cc;color:#744c12}
+#guidance.warning {background:#fae3dc;color:#813527}
+.row {padding:9px 0;border-bottom:1px solid #e5e7df}
+.row strong {text-align:right}
+h3 {font-size:15px;margin:17px 0 5px}
+#tags {display:flex;flex-wrap:wrap;gap:6px}
+.tag {padding:2px 10px;border-radius:20px;background:#e9ede5}
+details {margin-top:18px}summary {cursor:pointer;color:#30573d;font-weight:600}
+@media(max-width:720px){.grid{grid-template-columns:1fr}h1{margin-top:30px}article{padding:20px}textarea{min-height:140px}}
+</style>
+</head>
+<body>
+<header><nav><span class="brand"><span class="mark" aria-hidden="true">m</span>Margin</span><span class="local">Local workspace</span></nav></header>
+<main><h1>Comment review</h1><p class="intro">Type or paste an English comment to see how the model reads your draft.</p>
+<div class="grid"><article><h2><label for="draft">Your draft</label></h2>
+<textarea id="draft" maxlength="5000" placeholder="Write your comment here…" aria-describedby="privacy"></textarea>
+<div class="actions"><small id="count">0 / 5,000</small><button id="clear" disabled>Clear</button></div>
+<p class="note" id="privacy" style="margin-top:22px">Your text is processed on this computer.</p></article>
+<article class="panel"><h2>Live assessment</h2><p id="status" role="status">Waiting for your draft.</p>
+<div id="result" hidden><p id="guidance"></p><div class="row">Draft verdict <strong id="verdict"></strong></div>
+<div class="row">Estimated severity <strong id="severity"></strong></div><small>Berkeley scale · Higher scores indicate greater estimated severity.</small>
+<h3>Possible groups referenced</h3><div id="tags"></div>
+<details><summary>Estimated behavior ratings</summary><p class="note">Training ratings range from 0 to 4.</p><div id="ratings"></div></details></div>
+</article></div></main>
+<script>
+const byId = id => document.getElementById(id);
+const draft = byId("draft");
+const names = {insult:"Insult", humiliate:"Humiliation", dehumanize:"Dehumanization", violence:"Violence"};
+let timer, revision = 0, pending;
+
+function render(data) {
+  const guidance = byId("guidance");
+  guidance.textContent = data.posting_guidance;
+  guidance.className = data.verdict === "hate_speech" ? "warning" :
+    data.posting_guidance === "Review before posting" ? "review" : "";
+  byId("verdict").textContent = data.verdict.replaceAll("_", " ");
+  byId("severity").textContent = data.severity.toFixed(2);
+  byId("tags").replaceChildren();
+  for (const group of data.groups_referenced) {
+    const tag = document.createElement("span");
+    tag.className = "tag";
+    tag.textContent = group;
+    byId("tags").append(tag);
+  }
+  if (!data.groups_referenced.length) byId("tags").textContent = "None predicted";
+  byId("ratings").replaceChildren();
+  for (const [key, value] of Object.entries(data.behavior_ratings)) {
+    const row = document.createElement("div");
+    row.className = "row";
+    const score = document.createElement("strong");
+    score.textContent = value.toFixed(2);
+    row.append(names[key] || key, score);
+    byId("ratings").append(row);
+  }
+  byId("result").hidden = false;
+}
+
+function update() {
+  const current = ++revision;
+  clearTimeout(timer);
+  pending?.abort();
+  const text = draft.value;
+  byId("result").hidden = true;
+  byId("clear").disabled = !text.length;
+  byId("count").textContent = text.length.toLocaleString() + " / 5,000";
+  byId("status").textContent = text.trim() ? "Reading your draft…" : "Waiting for your draft.";
+  if (!text.trim()) return;
+  timer = setTimeout(async () => {
+    pending = new AbortController();
+    try {
+      const response = await fetch("/analyse", {method:"POST", headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({text}), signal:pending.signal});
+      if (!response.ok) throw new Error("Could not analyze");
+      const data = await response.json();
+      if (revision !== current) return;
+      render(data);
+      byId("status").textContent = "Updated for this draft.";
+    } catch (error) {
+      if (revision === current) byId("status").textContent = "Could not assess this draft. Check the local server and edit to retry.";
+    }
+  }, 350);
+}
+draft.addEventListener("input", update);
+byId("clear").onclick = () => { draft.value = ""; update(); draft.focus(); };
+</script></body></html>

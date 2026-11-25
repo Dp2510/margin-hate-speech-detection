@@ -1,0 +1,15 @@
+# Dashboard and shared model libraries
+joblib
+numpy
+scikit-learn
+torch
+transformers
+tqdm
+
+# Notebook and model training
+ipykernel
+ipywidgets
+matplotlib
+pandas
+pyarrow
+tensorflow

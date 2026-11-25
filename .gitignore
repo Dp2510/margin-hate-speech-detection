@@ -1,0 +1,22 @@
+# Local Python environment and caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.pytest_cache/
+
+# Local settings and secrets
+.env
+.env.*
+!.env.example
+.vscode/
+Thumbs.db
+.DS_Store
+
+# Dataset copies and generated model artifacts
+/measuring_hate_speech.parquet
+/berkeley_hate_speech_processed.parquet
+/hate_speech_models.joblib
+/distilbert_berkeley_epoch*/
+/comment_website.zip
